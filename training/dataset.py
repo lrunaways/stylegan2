@@ -98,11 +98,11 @@ class TFRecordDataset:
 
         # Determine shape and resolution.
         max_shape = max(tfr_shapes, key=np.prod)
-        #self.resolution = resolution if resolution is not None else max_shape[1]
-        #self.resolution_log2 = int(np.log2(self.resolution))
+        self.resolution = resolution if resolution is not None else max_shape[1]
+        self.resolution_log2 = int(np.log2(self.resolution))
         #self.shape = [max_shape[0], self.resolution, self.resolution]
         self.shape = [max_shape[0], max_shape[1], max_shape[2]]
-        tfr_lods = [self.res_log2 - int(np.log2(shape[1])) for shape in tfr_shapes]
+        tfr_lods = [self.resolution_log2 - int(np.log2(shape[1])) for shape in tfr_shapes]
         #assert all(shape[0] == max_shape[0] for shape in tfr_shapes)
         #assert all(shape[1] == shape[2] for shape in tfr_shapes)
         #assert all(shape[1] == self.resolution // (2**lod) for shape, lod in zip(tfr_shapes, tfr_lods))

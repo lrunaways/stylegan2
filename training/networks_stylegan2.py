@@ -695,7 +695,7 @@ def D_stylegan2(
     act = nonlinearity
 
     #images_in.set_shape([None, num_channels, resolution, resolution])
-    images_in.set_shape([None, num_channels, min_h*resolution, min_w*resolution])
+    images_in.set_shape([None, num_channels, min_h*2**res_log2, min_w*2**res_log2])
     labels_in.set_shape([None, label_size])
     images_in = tf.cast(images_in, dtype)
     labels_in = tf.cast(labels_in, dtype)
