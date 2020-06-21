@@ -102,7 +102,7 @@ class TFRecordDataset:
         #self.resolution_log2 = int(np.log2(self.resolution))
         #self.shape = [max_shape[0], self.resolution, self.resolution]
         self.shape = [max_shape[0], max_shape[1], max_shape[2]]
-        #tfr_lods = [self.resolution_log2 - int(np.log2(shape[1])) for shape in tfr_shapes]
+        tfr_lods = [self.res_log2 - int(np.log2(shape[1])) for shape in tfr_shapes]
         #assert all(shape[0] == max_shape[0] for shape in tfr_shapes)
         #assert all(shape[1] == shape[2] for shape in tfr_shapes)
         #assert all(shape[1] == self.resolution // (2**lod) for shape, lod in zip(tfr_shapes, tfr_lods))
@@ -121,8 +121,7 @@ class TFRecordDataset:
         #    self._np_labels = self._np_labels[:max_images]
         self.label_size = self._np_labels.shape[1]
         self.label_dtype = self._np_labels.dtype.name
-        #self.tfr = list(zip(tfr_files, tfr_shapes, tfr_lods))
-        self.tfr = list(zip(tfr_files, tfr_shapes))
+        self.tfr = list(zip(tfr_files, tfr_shapes, tfr_lods))
 
         def finalize():
           # Build TF expressions.
@@ -131,10 +130,9 @@ class TFRecordDataset:
               self._tf_labels_var, self._tf_labels_init = tflib.create_var_with_large_initial_value2(self._np_labels, name='labels_var')
               with tf.control_dependencies([self._tf_labels_init]):
                   self._tf_labels_dataset = tf.data.Dataset.from_tensor_slices(self._tf_labels_var)
-              # for tfr_file, tfr_shape, tfr_lod in self.tfr:
-              #     if tfr_lod < 0:
-              #         continue
-              for tfr_file, tfr_shape in self.tfr:
+              for tfr_file, tfr_shape, tfr_lod in self.tfr:
+                  if tfr_lod < 0:
+                      continue
                   dset = tf.data.TFRecordDataset(tfr_file, compression_type='', buffer_size=buffer_mb<<20)
                   if max_images is not None:
                       dset = dset.take(max_images)
