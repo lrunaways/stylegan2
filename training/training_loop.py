@@ -88,22 +88,27 @@ def training_schedule(
         if lod_transition_kimg > 0:
             s.lod -= max(phase_kimg - lod_training_kimg, 0.0) / lod_transition_kimg
         s.lod = max(s.lod, 0.0)
-    s.resolution = 2 ** (training_set.resolution_log2 - int(np.floor(s.lod)))
+    #s.resolution = 2 ** (training_set.resolution_log2 - int(np.floor(s.lod)))
 
     # Minibatch size.
-    s.minibatch_size = minibatch_size_dict.get(s.resolution, minibatch_size_base)
-    s.minibatch_gpu = minibatch_gpu_dict.get(s.resolution, minibatch_gpu_base)
+    #s.minibatch_size = minibatch_size_dict.get(s.resolution, minibatch_size_base)
+    #s.minibatch_gpu = minibatch_gpu_dict.get(s.resolution, minibatch_gpu_base)
+    s.minibatch_size = minibatch_size_base
+    s.minibatch_gpu = minibatch_gpu_base
 
     # Learning rate.
-    s.G_lrate = G_lrate_dict.get(s.resolution, G_lrate_base)
-    s.D_lrate = D_lrate_dict.get(s.resolution, D_lrate_base)
+    #s.G_lrate = G_lrate_dict.get(s.resolution, G_lrate_base)
+    #s.D_lrate = D_lrate_dict.get(s.resolution, D_lrate_base)
+    s.G_lrate = G_lrate_base
+    s.D_lrate = D_lrate_base
     if lrate_rampup_kimg > 0:
         rampup = min(s.kimg / lrate_rampup_kimg, 1.0)
         s.G_lrate *= rampup
         s.D_lrate *= rampup
 
     # Other parameters.
-    s.tick_kimg = tick_kimg_dict.get(s.resolution, tick_kimg_base)
+    #s.tick_kimg = tick_kimg_dict.get(s.resolution, tick_kimg_base)
+    s.tick_kimg = tick_kimg_base
     return s
 
 def get_input_fn(training_set, batch_size):

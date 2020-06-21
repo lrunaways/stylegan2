@@ -427,8 +427,9 @@ def G_synthesis_stylegan2(
     dlatent_size        = 512,          # Disentangled latent (W) dimensionality.
     num_channels        = 3,            # Number of output color channels.
     resolution          = 1024,         # Output resolution.
-    min_h               = 4,
-    min_w               = 4,
+    min_h               = 4,            # min height block
+    min_w               = 4,            # min width block
+    res_log2            = 8,            # output size [min_h * 2^res_log2, min_w * 2^res_log2]
     fmap_base           = 16 << 10,     # Overall multiplier for the number of feature maps.
     fmap_decay          = 1.0,          # log2 feature map reduction when doubling the resolution.
     fmap_min            = 1,            # Minimum number of feature maps in any layer.
@@ -443,13 +444,14 @@ def G_synthesis_stylegan2(
 
     num_channels = int(os.environ["NUM_CHANNELS"]) if "NUM_CHANNELS" in os.environ else num_channels
 
-    resolution_log2 = int(np.log2(resolution))
-    assert resolution == 2**resolution_log2 and resolution >= 4
-    assert min_h > 0 and min_w > 0
+    #resolution_log2 = int(np.log2(resolution))
+    #assert resolution == 2**resolution_log2 and resolution >= 4
+    assert min_h > 0 and min_w > 0 and res_log2 > 0
     def nf(stage): return np.clip(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_min, fmap_max)
     assert architecture in ['orig', 'skip', 'resnet']
     act = nonlinearity
-    num_layers = resolution_log2 * 2 - 2
+    #num_layers = resolution_log2 * 2 - 2
+    num_layers = res_log2 * 2 + 2
     images_out = None
 
     # Primary inputs.
@@ -459,8 +461,10 @@ def G_synthesis_stylegan2(
     # Noise inputs.
     noise_inputs = []
     for layer_idx in range(num_layers - 1):
-        res = (layer_idx + 5) // 2
-        shape = [1, 1, 2**res, 2**res]
+        #res = (layer_idx + 5) // 2
+        #shape = [1, 1, 2**res, 2**res]
+        res = (layer_idx + 5) // 2 - 2
+        shape = [1, 1, min_h*2**res, min_w*2**res]
         noise_inputs.append(tf.get_variable('noise%d' % layer_idx, shape=shape, initializer=tf.initializers.random_normal(), trainable=False, use_resource=True))
 
     # Single convolution layer with all the bells and whistles.
@@ -473,7 +477,7 @@ def G_synthesis_stylegan2(
         noise_strength = tf.get_variable('noise_strength', shape=[], initializer=tf.initializers.zeros(), use_resource=True)
         x += noise * tf.cast(noise_strength, x.dtype)
         return apply_bias_act(x, act=act)
-
+    """
     # Building blocks for main layers.
     def block(x, res): # res = 3..resolution_log2
         t = x
@@ -486,16 +490,34 @@ def G_synthesis_stylegan2(
                 t = conv2d_layer(t, fmaps=nf(res-1), kernel=1, up=True, resample_kernel=resample_kernel)
                 x = (x + t) * (1 / np.sqrt(2))
         return x
+    """
+    def block(x, res): # res = 1..res_log2
+        t = x
+        with tf.variable_scope('Conv0_up'):
+            x = layer(x, layer_idx=res*2-1, fmaps=nf(res+1), kernel=3, up=True)
+        with tf.variable_scope('Conv1'):
+            x = layer(x, layer_idx=res*2, fmaps=nf(res+1), kernel=3)
+        if architecture == 'resnet':
+            with tf.variable_scope('Skip'):
+                t = conv2d_layer(t, fmaps=nf(res+1), kernel=1, up=True, resample_kernel=resample_kernel)
+                x = (x + t) * (1 / np.sqrt(2))
+        return x
     def upsample(y):
         with tf.variable_scope('Upsample'):
             return upsample_2d(y, k=resample_kernel)
+    """
     def torgb(x, y, res): # res = 2..resolution_log2
         with tf.variable_scope('ToRGB'):
             t = apply_bias_act(modulated_conv2d_layer(x, dlatents_in[:, res*2-3], fmaps=num_channels, kernel=1, demodulate=False, fused_modconv=fused_modconv))
             return graph_images(t if y is None else y + t, res=2**res)
-
+    """
+    def torgb(x, y, res): # res = 0..res_log2
+        with tf.variable_scope('ToRGB'):
+            t = apply_bias_act(modulated_conv2d_layer(x, dlatents_in[:, res*2+1], fmaps=num_channels, kernel=1, demodulate=False, fused_modconv=fused_modconv))
+            return t if y is None else y + t
     # Early layers.
     y = None
+    """
     with tf.variable_scope('%dx%d' % (min_h, min_w)):
         with tf.variable_scope('Const'):
             x = tf.get_variable('const', shape=[1, nf(1), 4, 4], initializer=tf.initializers.random_normal(), use_resource=True)
@@ -516,6 +538,23 @@ def G_synthesis_stylegan2(
                 y = upsample(y)
             if architecture == 'skip' or res == resolution_log2:
                 y = torgb(x, y, res)
+    """
+    with tf.variable_scope('%dx%d' % (min_h, min_w)):
+        with tf.variable_scope('Const'):
+            x = tf.get_variable('const', shape=[1, nf(1), min_h, min_w], initializer=tf.initializers.random_normal())
+            x = tf.tile(tf.cast(x, dtype), [tf.shape(dlatents_in)[0], 1, 1, 1])
+        with tf.variable_scope('Conv'):
+            x = layer(x, layer_idx=0, fmaps=nf(1), kernel=3)
+        if architecture == 'skip':
+            y = torgb(x, y, 0)
+            # Main layers.
+    for res in range(1, res_log2 + 1):
+        with tf.variable_scope('%dx%d' % (min_h*2**res, min_w*2**res)):
+            x = block(x, res)
+            if architecture == 'skip':
+                y = upsample(y)
+            if architecture == 'skip' or res == resolution_log2:
+                y = torgb(x, y, res)
     images_out = y
 
     assert images_out.dtype == tf.as_dtype(dtype)
@@ -530,8 +569,6 @@ def D_stylegan(
     labels_in,                          # Second input: Labels [minibatch, label_size].
     num_channels        = 3,            # Number of input color channels. Overridden based on dataset.
     resolution          = 1024,         # Input resolution. Overridden based on dataset.
-    min_h = 4,
-    min_w = 4,
     label_size          = 0,            # Dimensionality of the labels, 0 if no labels. Overridden based on dataset.
     fmap_base           = 16 << 10,     # Overall multiplier for the number of feature maps.
     fmap_decay          = 1.0,          # log2 feature map reduction when doubling the resolution.
@@ -550,7 +587,6 @@ def D_stylegan(
 
     resolution_log2 = int(np.log2(resolution))
     assert resolution == 2**resolution_log2 and resolution >= 4
-    assert min_h > 0 and min_w > 0
     def nf(stage): return np.clip(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_min, fmap_max)
     if structure == 'auto': structure = 'linear' if is_template_graph else 'recursive'
     act = nonlinearity
@@ -633,6 +669,9 @@ def D_stylegan2(
     labels_in,                          # Second input: Labels [minibatch, label_size].
     num_channels        = 3,            # Number of input color channels. Overridden based on dataset.
     resolution          = 1024,         # Input resolution. Overridden based on dataset.
+    min_h               = 4,            # min height
+    min_w               = 4,            # min width
+    res_log2            = 8,            # output size [min_h * 2^res_log2, min_w * 2^res_log2]
     label_size          = 0,            # Dimensionality of the labels, 0 if no labels. Overridden based on dataset.
     fmap_base           = 16 << 10,     # Overall multiplier for the number of feature maps.
     fmap_decay          = 1.0,          # log2 feature map reduction when doubling the resolution.
@@ -648,18 +687,21 @@ def D_stylegan2(
 
     num_channels = int(os.environ["NUM_CHANNELS"]) if "NUM_CHANNELS" in os.environ else num_channels
 
-    resolution_log2 = int(np.log2(resolution))
-    assert resolution == 2**resolution_log2 and resolution >= 4
+    #resolution_log2 = int(np.log2(resolution))
+    #assert resolution == 2**resolution_log2 and resolution >= 4
+    assert min_h > 0 and min_w > 0 and res_log2 > 0
     def nf(stage): return np.clip(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_min, fmap_max)
     assert architecture in ['orig', 'skip', 'resnet']
     act = nonlinearity
 
+    #images_in.set_shape([None, num_channels, resolution, resolution])
     images_in.set_shape([None, num_channels, min_h*resolution, min_w*resolution])
     labels_in.set_shape([None, label_size])
     images_in = tf.cast(images_in, dtype)
     labels_in = tf.cast(labels_in, dtype)
 
     # Building blocks for main layers.
+    """
     def fromrgb(x, y, res): # res = 2..resolution_log2
         with tf.variable_scope('FromRGB'):
             t = apply_bias_act(conv2d_layer(y, fmaps=nf(res-1), kernel=1), act=act)
@@ -675,6 +717,22 @@ def D_stylegan2(
                 t = conv2d_layer(t, fmaps=nf(res-2), kernel=1, down=True, resample_kernel=resample_kernel)
                 x = (x + t) * (1 / np.sqrt(2))
         return x
+    """
+    def fromrgb(x, y, res): # res = 0..res_log2
+        with tf.variable_scope('FromRGB'):
+            t = apply_bias_act(conv2d_layer(y, fmaps=nf(res+1), kernel=1), act=act)
+            return t if x is None else x + t
+    def block(x, res): # res = 0..res_log2
+        t = x
+        with tf.variable_scope('Conv0'):
+            x = apply_bias_act(conv2d_layer(x, fmaps=nf(res+1), kernel=3), act=act)
+        with tf.variable_scope('Conv1_down'):
+            x = apply_bias_act(conv2d_layer(x, fmaps=nf(res), kernel=3, down=True, resample_kernel=resample_kernel), act=act)
+        if architecture == 'resnet':
+            with tf.variable_scope('Skip'):
+                t = conv2d_layer(t, fmaps=nf(res), kernel=1, down=True, resample_kernel=resample_kernel)
+                x = (x + t) * (1 / np.sqrt(2))
+        return x
     def downsample(y):
         with tf.variable_scope('Downsample'):
             return downsample_2d(y, k=resample_kernel)
@@ -682,6 +740,7 @@ def D_stylegan2(
     # Main layers.
     x = None
     y = images_in
+    """
     for res in range(resolution_log2, 2, -1):
         with tf.variable_scope('%dx%d' % (2**res, 2**res)):
             if architecture == 'skip' or res == resolution_log2:
@@ -692,11 +751,31 @@ def D_stylegan2(
             x = block(x, res)
             if architecture == 'skip':
                 y = downsample(y)
+    """
+    for res in range(res_log2, 0, -1):
+        with tf.variable_scope('%dx%d' % (min_h*2**res, min_w*2**res)):
+            if architecture == 'skip' or res == res_log2:
+                x = fromrgb(x, y, res)
+            x = block(x, res)
+            if architecture == 'skip':
+                y = downsample(y)
 
     # Final layers.
+    """
     with tf.variable_scope('4x4'):
         if architecture == 'skip':
             x = fromrgb(x, y, 2)
+        if mbstd_group_size > 1:
+            with tf.variable_scope('MinibatchStddev'):
+                x = minibatch_stddev_layer(x, mbstd_group_size, mbstd_num_features)
+        with tf.variable_scope('Conv'):
+            x = apply_bias_act(conv2d_layer(x, fmaps=nf(1), kernel=3), act=act)
+        with tf.variable_scope('Dense0'):
+            x = apply_bias_act(dense_layer(x, fmaps=nf(0)), act=act)
+    """
+    with tf.variable_scope('%dx%d' % (min_h, min_w)):
+        if architecture == 'skip':
+            x = fromrgb(x, y, 0)
         if mbstd_group_size > 1:
             with tf.variable_scope('MinibatchStddev'):
                 x = minibatch_stddev_layer(x, mbstd_group_size, mbstd_num_features)
