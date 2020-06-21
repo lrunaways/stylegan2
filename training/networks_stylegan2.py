@@ -315,8 +315,6 @@ def G_synthesis_stylegan_revised(
     dlatent_size        = 512,          # Disentangled latent (W) dimensionality.
     num_channels        = 3,            # Number of output color channels.
     resolution          = 1024,         # Output resolution.
-    min_h = 4,
-    min_w = 4,
     fmap_base           = 16 << 10,     # Overall multiplier for the number of feature maps.
     fmap_decay          = 1.0,          # log2 feature map reduction when doubling the resolution.
     fmap_min            = 1,            # Minimum number of feature maps in any layer.
@@ -335,7 +333,6 @@ def G_synthesis_stylegan_revised(
 
     resolution_log2 = int(np.log2(resolution))
     assert resolution == 2**resolution_log2 and resolution >= 4
-    assert min_h > 0 and min_w > 0
     def nf(stage): return np.clip(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_min, fmap_max)
     if is_template_graph: force_clean_graph = True
     if force_clean_graph: randomize_noise = False
@@ -352,8 +349,8 @@ def G_synthesis_stylegan_revised(
     # Noise inputs.
     noise_inputs = []
     for layer_idx in range(num_layers - 1):
-        res = (layer_idx + 5) // 2 - 2
-        shape = [1, 1, min_h**res, min_w**res]
+        res = (layer_idx + 5) // 2
+        shape = [1, 1, 2**res, 2**res]
         noise_inputs.append(tf.get_variable('noise%d' % layer_idx, shape=shape, initializer=tf.initializers.random_normal(), trainable=False, use_resource=True))
 
     # Single convolution layer with all the bells and whistles.
@@ -430,6 +427,8 @@ def G_synthesis_stylegan2(
     dlatent_size        = 512,          # Disentangled latent (W) dimensionality.
     num_channels        = 3,            # Number of output color channels.
     resolution          = 1024,         # Output resolution.
+    min_h               = 4,
+    min_w               = 4,
     fmap_base           = 16 << 10,     # Overall multiplier for the number of feature maps.
     fmap_decay          = 1.0,          # log2 feature map reduction when doubling the resolution.
     fmap_min            = 1,            # Minimum number of feature maps in any layer.
@@ -446,6 +445,7 @@ def G_synthesis_stylegan2(
 
     resolution_log2 = int(np.log2(resolution))
     assert resolution == 2**resolution_log2 and resolution >= 4
+    assert min_h > 0 and min_w > 0
     def nf(stage): return np.clip(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_min, fmap_max)
     assert architecture in ['orig', 'skip', 'resnet']
     act = nonlinearity
