@@ -23,9 +23,10 @@ from tensorflow.python.framework import errors_impl
 class TFRecordDataset:
     def __init__(self,
         tfrecord_dir,               # Directory containing a collection of tfrecords files.
+        min_h           = 4,        # height = min_h * res_log2
+        min_w           = 4,        # width = min_h * res_log2
+        res_log2        = 7,        # larger = deeper network?
         resolution      = None,     # Dataset resolution, None = autodetect.
-        min_h = 4,
-        min_w = 4,
         label_file      = None,     # Relative path of the labels file, None = autodetect.
         max_label_size  = None,     # 0 = no labels, 'full' = full labels, <int> = N first label components.
         max_images      = None,     # Maximum number of images to use, None = use all images.
@@ -47,10 +48,10 @@ class TFRecordDataset:
         assert max_label_size == 'full' or isinstance(max_label_size, int) and max_label_size >= 0
 
         self.tfrecord_dir       = tfrecord_dir
-        self.resolution         = None
+        #self.resolution         = None # why is this commented out?
         self.min_h = min_h
         self.min_w = min_w
-        self.resolution_log2    = None
+        #self.resolution_log2    = None # why is this commented out?
         self.shape              = []        # [channels, height, width]
         self.dtype              = 'uint8'
         self.dynamic_range      = [0, 255]
@@ -97,14 +98,15 @@ class TFRecordDataset:
 
         # Determine shape and resolution.
         max_shape = max(tfr_shapes, key=np.prod)
-        self.resolution = resolution if resolution is not None else max_shape[1]
-        self.resolution_log2 = int(np.log2(self.resolution))
-        self.shape = [max_shape[0], self.resolution, self.resolution]
-        tfr_lods = [self.resolution_log2 - int(np.log2(shape[1])) for shape in tfr_shapes]
-        assert all(shape[0] == max_shape[0] for shape in tfr_shapes)
-        assert all(shape[1] == shape[2] for shape in tfr_shapes)
-        assert all(shape[1] == self.resolution // (2**lod) for shape, lod in zip(tfr_shapes, tfr_lods))
-        assert all(lod in tfr_lods for lod in range(self.resolution_log2 - 1))
+        #self.resolution = resolution if resolution is not None else max_shape[1]
+        #self.resolution_log2 = int(np.log2(self.resolution))
+        #self.shape = [max_shape[0], self.resolution, self.resolution]
+        self.shape = [max_shape[0], max_shape[1], max_shape[2]]
+        #tfr_lods = [self.resolution_log2 - int(np.log2(shape[1])) for shape in tfr_shapes]
+        #assert all(shape[0] == max_shape[0] for shape in tfr_shapes)
+        #assert all(shape[1] == shape[2] for shape in tfr_shapes)
+        #assert all(shape[1] == self.resolution // (2**lod) for shape, lod in zip(tfr_shapes, tfr_lods))
+        #assert all(lod in tfr_lods for lod in range(self.resolution_log2 - 1))
 
         # Load labels.
         assert max_label_size == 'full' or max_label_size >= 0
@@ -115,8 +117,8 @@ class TFRecordDataset:
             assert self._np_labels.ndim == 2
         if max_label_size != 'full' and self._np_labels.shape[1] > max_label_size:
             self._np_labels = self._np_labels[:, :max_label_size]
-        if max_images is not None and self._np_labels.shape[0] > max_images:
-            self._np_labels = self._np_labels[:max_images]
+        #if max_images is not None and self._np_labels.shape[0] > max_images:
+        #    self._np_labels = self._np_labels[:max_images]
         self.label_size = self._np_labels.shape[1]
         self.label_dtype = self._np_labels.dtype.name
         self.tfr = list(zip(tfr_files, tfr_shapes, tfr_lods))

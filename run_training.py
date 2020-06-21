@@ -35,7 +35,7 @@ _valid_configs = [
 
 #----------------------------------------------------------------------------
 
-def run(dataset, data_dir, result_dir, config_id, num_gpus, total_kimg, gamma, mirror_augment, metrics, min_h, min_w):
+def run(dataset, data_dir, result_dir, config_id, num_gpus, total_kimg, gamma, mirror_augment, metrics, min_h, min_w, res_log2):
     train     = EasyDict(run_func_name='training.training_loop.training_loop') # Options for training loop.
     G         = EasyDict(func_name='training.networks_stylegan2.G_main')       # Options for generator network.
     D         = EasyDict(func_name='training.networks_stylegan2.D_stylegan2')  # Options for discriminator network.
@@ -73,6 +73,7 @@ def run(dataset, data_dir, result_dir, config_id, num_gpus, total_kimg, gamma, m
     dataset_args = EasyDict(tfrecord_dir=dataset, resolution=resolution)
     G.min_h = D.min_h = dataset_args.min_h = min_h
     G.min_w = D.min_w = dataset_args.min_w = min_w
+    G.res_log2 = D.res_log2 = dataset_args.res_log2 = res_log2
     assert num_gpus in [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]
     sc.num_gpus = num_gpus
     desc += '-%dgpu' % num_gpus
@@ -191,6 +192,7 @@ def main():
     parser.add_argument('--metrics', help='Comma-separated list of metrics or "none" (default: %(default)s)', default='fid50k', type=_parse_comma_sep)
     parser.add_argument('--min-h', help='lowest dim of height', default=4, type=int)
     parser.add_argument('--min-w', help='lowest dim of width', default=4, type=int)
+    parser.add_argument('--res-log2', help='multiplier for image size, the training image size (height, width) should be (min_h * 2**res_log2
 
     args = parser.parse_args()
 
