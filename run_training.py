@@ -192,7 +192,7 @@ def main():
     parser.add_argument('--metrics', help='Comma-separated list of metrics or "none" (default: %(default)s)', default='fid50k', type=_parse_comma_sep)
     parser.add_argument('--min-h', help='lowest dim of height', default=4, type=int)
     parser.add_argument('--min-w', help='lowest dim of width', default=4, type=int)
-    parser.add_argument('--res-log2', help='multiplier for image size, the training image size (height, width) should be (min_h * 2**res_log2
+    parser.add_argument('--res-log2', help='multiplier for image size, the training image size (height, width) should be (min_h * 2**res_log2)', default=7, type=int)
 
     args = parser.parse_args()
 
