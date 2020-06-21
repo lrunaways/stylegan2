@@ -24,6 +24,8 @@ class TFRecordDataset:
     def __init__(self,
         tfrecord_dir,               # Directory containing a collection of tfrecords files.
         resolution      = None,     # Dataset resolution, None = autodetect.
+        min_h = 4,
+        min_w = 4,
         label_file      = None,     # Relative path of the labels file, None = autodetect.
         max_label_size  = None,     # 0 = no labels, 'full' = full labels, <int> = N first label components.
         max_images      = None,     # Maximum number of images to use, None = use all images.
@@ -46,6 +48,8 @@ class TFRecordDataset:
 
         self.tfrecord_dir       = tfrecord_dir
         self.resolution         = None
+        self.min_h = min_h
+        self.min_w = min_w
         self.resolution_log2    = None
         self.shape              = []        # [channels, height, width]
         self.dtype              = 'uint8'

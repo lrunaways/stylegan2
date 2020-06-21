@@ -315,6 +315,8 @@ def G_synthesis_stylegan_revised(
     dlatent_size        = 512,          # Disentangled latent (W) dimensionality.
     num_channels        = 3,            # Number of output color channels.
     resolution          = 1024,         # Output resolution.
+    min_h = 4,
+    min_w = 4,
     fmap_base           = 16 << 10,     # Overall multiplier for the number of feature maps.
     fmap_decay          = 1.0,          # log2 feature map reduction when doubling the resolution.
     fmap_min            = 1,            # Minimum number of feature maps in any layer.
@@ -333,6 +335,7 @@ def G_synthesis_stylegan_revised(
 
     resolution_log2 = int(np.log2(resolution))
     assert resolution == 2**resolution_log2 and resolution >= 4
+    assert min_h > 0 and min_w > 0
     def nf(stage): return np.clip(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_min, fmap_max)
     if is_template_graph: force_clean_graph = True
     if force_clean_graph: randomize_noise = False
@@ -349,8 +352,8 @@ def G_synthesis_stylegan_revised(
     # Noise inputs.
     noise_inputs = []
     for layer_idx in range(num_layers - 1):
-        res = (layer_idx + 5) // 2
-        shape = [1, 1, 2**res, 2**res]
+        res = (layer_idx + 5) // 2 - 2
+        shape = [1, 1, min_h**res, min_w**res]
         noise_inputs.append(tf.get_variable('noise%d' % layer_idx, shape=shape, initializer=tf.initializers.random_normal(), trainable=False, use_resource=True))
 
     # Single convolution layer with all the bells and whistles.
@@ -367,7 +370,7 @@ def G_synthesis_stylegan_revised(
     # Early layers.
     with tf.variable_scope('4x4'):
         with tf.variable_scope('Const'):
-            x = tf.get_variable('const', shape=[1, nf(1), 4, 4], initializer=tf.initializers.random_normal(), use_resource=True)
+            x = tf.get_variable('const', shape=[1, nf(1), min_h, min_w], initializer=tf.initializers.random_normal(), use_resource=True)
             x = tf.tile(tf.cast(x, dtype), [tf.shape(dlatents_in)[0], 1, 1, 1])
         with tf.variable_scope('Conv'):
             x = layer(x, layer_idx=0, fmaps=nf(1), kernel=3)
@@ -493,7 +496,7 @@ def G_synthesis_stylegan2(
 
     # Early layers.
     y = None
-    with tf.variable_scope('4x4'):
+    with tf.variable_scope('%dx%d' % (min_h, min_w)):
         with tf.variable_scope('Const'):
             x = tf.get_variable('const', shape=[1, nf(1), 4, 4], initializer=tf.initializers.random_normal(), use_resource=True)
             x = tf.tile(tf.cast(x, dtype), [tf.shape(dlatents_in)[0], 1, 1, 1])
@@ -504,7 +507,7 @@ def G_synthesis_stylegan2(
 
     # Main layers.
     for res in range(3, resolution_log2 + 1):
-        with tf.variable_scope('%dx%d' % (2**res, 2**res)):
+        with tf.variable_scope('%dx%d' % (min_h*2**res, min_w*2**res)):
             x = block(x, res)
             if 2**res == 64 and False:
                 print('Adding self-attention block to generator')
@@ -527,6 +530,8 @@ def D_stylegan(
     labels_in,                          # Second input: Labels [minibatch, label_size].
     num_channels        = 3,            # Number of input color channels. Overridden based on dataset.
     resolution          = 1024,         # Input resolution. Overridden based on dataset.
+    min_h = 4,
+    min_w = 4,
     label_size          = 0,            # Dimensionality of the labels, 0 if no labels. Overridden based on dataset.
     fmap_base           = 16 << 10,     # Overall multiplier for the number of feature maps.
     fmap_decay          = 1.0,          # log2 feature map reduction when doubling the resolution.
@@ -545,6 +550,7 @@ def D_stylegan(
 
     resolution_log2 = int(np.log2(resolution))
     assert resolution == 2**resolution_log2 and resolution >= 4
+    assert min_h > 0 and min_w > 0
     def nf(stage): return np.clip(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_min, fmap_max)
     if structure == 'auto': structure = 'linear' if is_template_graph else 'recursive'
     act = nonlinearity
@@ -648,7 +654,7 @@ def D_stylegan2(
     assert architecture in ['orig', 'skip', 'resnet']
     act = nonlinearity
 
-    images_in.set_shape([None, num_channels, resolution, resolution])
+    images_in.set_shape([None, num_channels, min_h*resolution, min_w*resolution])
     labels_in.set_shape([None, label_size])
     images_in = tf.cast(images_in, dtype)
     labels_in = tf.cast(labels_in, dtype)
