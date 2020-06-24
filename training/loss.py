@@ -10,6 +10,7 @@ import numpy as np
 import tensorflow as tf
 import dnnlib.tflib as tflib
 from dnnlib.tflib.autosummary import autosummary
+import RFAugment
 
 #----------------------------------------------------------------------------
 # Logistic loss from the paper
@@ -50,9 +51,11 @@ def D_logistic(G, D, opt, training_set, minibatch_size, reals, labels):
 # "Which Training Methods for GANs do actually Converge?", Mescheder et al. 2018
 
 def D_logistic_r1(G, D, opt, training_set, minibatch_size, reals, labels, gamma=10.0):
+    reals = RFAugment.augment(reals, policy='color,random', channels_first=True, mode='gpu')
     _ = opt, training_set
     latents = tf.random_normal([minibatch_size] + G.input_shapes[0][1:])
     fake_images_out = G.get_output_for(latents, labels, is_training=True)
+    fake_images_out = RFAugment.augment(fake_images_out, policy='color,random', channels_first=True, mode='gpu')
     real_scores_out = D.get_output_for(reals, labels, is_training=True)
     fake_scores_out = D.get_output_for(fake_images_out, labels, is_training=True)
     real_scores_out = autosummary('Loss/scores/real', real_scores_out)
@@ -150,6 +153,7 @@ def G_logistic_ns_pathreg(G, D, opt, training_set, minibatch_size, pl_minibatch_
     latents = tf.random_normal([minibatch_size] + G.input_shapes[0][1:])
     labels = training_set.get_random_labels_tf(minibatch_size)
     fake_images_out, fake_dlatents_out = G.get_output_for(latents, labels, is_training=True, return_dlatents=True)
+    fake_images_out = RFAugment.augment(fake_images_out, policy='color,random', channels_first=True, mode='gpu')
     fake_scores_out = D.get_output_for(fake_images_out, labels, is_training=True)
     loss = tf.nn.softplus(-fake_scores_out) # -log(sigmoid(fake_scores_out))
 
